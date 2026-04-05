@@ -825,7 +825,15 @@ if (bc) {
 // Remote relay polling via jsonbin.io
 const JSONBIN_BASE = 'https://api.jsonbin.io/v3';
 const JSONBIN_KEY = '$2a$10$M/jsjg4fqdABJuJoK5d3yezbUggWWqTAM1IT41.ndqDfIBq6TCmqe';
-let _pollBinId = null;
+// Bin ID is written here by netscope.js flush on first run,
+// or can be hardcoded if already known.
+// Format: { sessionId: binId }
+let _binRegistry = {};
+try {
+  const stored = localStorage.getItem('netscope_bins');
+  if (stored) _binRegistry = JSON.parse(stored);
+} catch {}
+let _pollBinId = _binRegistry[SESSION_ID] || null;
 
 let pollInterval = null;
 let isConnected = false;
@@ -845,16 +853,10 @@ function setConnected(val) {
 
 async function pollRemote() {
   try {
+    // Bin ID is set directly by netscope.js via window.__netscopeBinId,
+    // or hardcoded here as a fallback once known
     if (!_pollBinId) {
-      // Search bins by name to find ours
-      const res = await fetch(`${JSONBIN_BASE}/b?binName=netscope-${SESSION_ID}`, {
-        headers: { 'X-Master-Key': JSONBIN_KEY }
-      });
-      if (!res.ok) return;
-      const bins = await res.json();
-      const list = Array.isArray(bins) ? bins : (bins.result || []);
-      if (list.length === 0) return;
-      _pollBinId = list[0].id || list[0].snippetMeta?.id;
+      _pollBinId = window.__netscopeBinId || null;
       if (!_pollBinId) return;
     }
 
