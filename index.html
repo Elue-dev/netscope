@@ -869,11 +869,10 @@ async function pollRemote() {
     const data = json.record?.requests;
     if (!Array.isArray(data)) return;
 
-    const newOnes = data.filter(r => !lastSeen || r.timestamp > lastSeen);
-    if (newOnes.length > 0) {
+    // Always process all entries — addRequest deduplicates by ID
+    if (data.length > 0) {
       setConnected(true);
-      newOnes.forEach(r => addRequest(r));
-      lastSeen = Math.max(...data.map(r => r.timestamp));
+      data.forEach(r => addRequest(r));
     }
   } catch(e) {
     // silent
