@@ -822,9 +822,10 @@ if (bc) {
   };
 }
 
-// Remote relay polling via a simple public endpoint
-// Using a free public key-value store (kvdb.io)
-const POLL_URL = `https://kvdb.io/9mPpBzFXSmEU7q5UBwQwaf/ns_${SESSION_ID}`;
+// Remote relay polling via jsonbin.io
+const JSONBIN_BASE = 'https://api.jsonbin.io/v3';
+const JSONBIN_KEY = '$2a$10$M/jsjg4fqdABJuJoK5d3yezbUggWWqTAM1IT41.ndqDfIBq6TCmqe';
+let _pollBinId = null;
 
 let pollInterval = null;
 let isConnected = false;
@@ -844,11 +845,28 @@ function setConnected(val) {
 
 async function pollRemote() {
   try {
-    const res = await fetch(POLL_URL, { cache: 'no-store' });
+    if (!_pollBinId) {
+      // Search bins by name to find ours
+      const res = await fetch(`${JSONBIN_BASE}/b?binName=netscope-${SESSION_ID}`, {
+        headers: { 'X-Master-Key': JSONBIN_KEY }
+      });
+      if (!res.ok) return;
+      const bins = await res.json();
+      const list = Array.isArray(bins) ? bins : (bins.result || []);
+      if (list.length === 0) return;
+      _pollBinId = list[0].id || list[0].snippetMeta?.id;
+      if (!_pollBinId) return;
+    }
+
+    const res = await fetch(`${JSONBIN_BASE}/b/${_pollBinId}/latest`, {
+      cache: 'no-store',
+      headers: { 'X-Master-Key': JSONBIN_KEY }
+    });
     if (!res.ok) return;
-    const data = await res.json();
+    const json = await res.json();
+    const data = json.record?.requests;
     if (!Array.isArray(data)) return;
-    // Find entries newer than lastSeen
+
     const newOnes = data.filter(r => !lastSeen || r.timestamp > lastSeen);
     if (newOnes.length > 0) {
       setConnected(true);
@@ -860,8 +878,8 @@ async function pollRemote() {
   }
 }
 
-// Start polling every 1.5s
-pollInterval = setInterval(pollRemote, 1500);
+// Start polling every 2s
+pollInterval = setInterval(pollRemote, 2000);
 
 // ─── RENDERING ────────────────────────────────────────────────────────────────
 
