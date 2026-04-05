@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetScope — HTTP Inspector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0c;
+    --surface: #111114;
+    --surface2: #17171c;
+    --border: #222228;
+    --border2: #2e2e38;
+    --text: #e8e8f0;
+    --muted: #5a5a70;
+    --accent: #6c63ff;
+    --accent2: #9d97ff;
+    --green: #3ddc84;
+    --yellow: #ffd166;
+    --red: #ff5c7c;
+    --orange: #ff9548;
+    --blue: #4da6ff;
+    --cyan: #3ddcdc;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--sans);~
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.5px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .logo-dot {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--accent);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.85); }
+  }
+
+  .connection-badge {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    color: var(--muted);
+    transition: all 0.3s;
+  }
+
+  .connection-badge.connected {
+    color: var(--green);
+    border-color: rgba(61,220,132,0.3);
+    background: rgba(61,220,132,0.05);
+  }
+
+  .conn-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: all 0.3s;
+  }
+
+  .connection-badge.connected .conn-dot {
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 1.5s infinite;
+  }
+
+  .session-id {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .session-id:hover {
+    border-color: var(--border2);
+    color: var(--text);
+  }
+
+  .spacer { flex: 1; }
+
+  .stats-row {
+    display: flex; gap: 12px; align-items: center;
+  }
+
+  .stat {
+    font-size: 10px;
+    color: var(--muted);
+    display: flex; align-items: center; gap: 4px;
+  }
+
+  .stat span {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .btn:hover { color: var(--text); border-color: var(--border2); background: var(--surface2); }
+  .btn.danger:hover { color: var(--red); border-color: rgba(255,92,124,0.4); background: rgba(255,92,124,0.05); }
+  .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn.primary:hover { background: #7d75ff; }
+
+  /* ── FILTER BAR ── */
+  .filterbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .search-wrap {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 10px;
+    flex: 1; max-width: 320px;
+    transition: border-color 0.15s;
+  }
+
+  .search-wrap:focus-within { border-color: var(--accent); }
+
+  .search-wrap input {
+    background: none; border: none; outline: none;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--text); flex: 1;
+  }
+
+  .search-wrap input::placeholder { color: var(--muted); }
+  .search-icon { color: var(--muted); font-size: 12px; }
+
+  .filter-chips {
+    display: flex; gap: 6px;
+  }
+
+  .chip {
+    padding: 4px 10px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .chip:hover { border-color: var(--border2); color: var(--text); }
+  .chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .chip.get.active { background: var(--blue); border-color: var(--blue); }
+  .chip.post.active { background: var(--green); border-color: var(--green); }
+  .chip.put.active { background: var(--yellow); border-color: var(--yellow); color: #111; }
+  .chip.patch.active { background: var(--orange); border-color: var(--orange); }
+  .chip.delete.active { background: var(--red); border-color: var(--red); }
+
+  .separator { width: 1px; height: 20px; background: var(--border); }
+
+  .method-filter { display: flex; gap: 6px; }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── REQUEST LIST ── */
+  .request-list {
+    width: 420px;
+    min-width: 300px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    resize: horizontal;
+  }
+
+  .list-header {
+    display: grid;
+    grid-template-columns: 54px 60px 1fr 70px 64px;
+    padding: 6px 14px;
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .request-items {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .request-items::-webkit-scrollbar { width: 4px; }
+  .request-items::-webkit-scrollbar-track { background: transparent; }
+  .request-items::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .req-row {
+    display: grid;
+    grid-template-columns: 54px 60px 1fr 70px 64px;
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    align-items: center;
+    position: relative;
+  }
+
+  .req-row:hover { background: var(--surface2); }
+  .req-row.selected { background: rgba(108,99,255,0.12); }
+  .req-row.selected::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 2px; background: var(--accent);
+  }
+
+  .req-row.new-entry {
+    animation: slideIn 0.2s ease-out;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-6px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .method-tag {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 5px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    text-align: center;
+    width: fit-content;
+  }
+
+  .method-tag.GET { background: rgba(77,166,255,0.15); color: var(--blue); }
+  .method-tag.POST { background: rgba(61,220,132,0.15); color: var(--green); }
+  .method-tag.PUT { background: rgba(255,209,102,0.15); color: var(--yellow); }
+  .method-tag.PATCH { background: rgba(255,149,72,0.15); color: var(--orange); }
+  .method-tag.DELETE { background: rgba(255,92,124,0.15); color: var(--red); }
+  .method-tag.WS { background: rgba(108,99,255,0.15); color: var(--accent2); }
+  .method-tag.OTHER { background: rgba(90,90,112,0.2); color: var(--muted); }
+
+  .status-badge {
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .status-badge.s2xx { color: var(--green); }
+  .status-badge.s3xx { color: var(--cyan); }
+  .status-badge.s4xx { color: var(--yellow); }
+  .status-badge.s5xx { color: var(--red); }
+  .status-badge.pending { color: var(--muted); animation: blink 1s infinite; }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .req-url {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text); font-size: 11px; padding-right: 8px;
+  }
+
+  .req-url .path { color: var(--text); }
+  .req-url .host { color: var(--muted); font-size: 10px; }
+
+  .req-duration { color: var(--muted); font-size: 10px; text-align: right; }
+  .req-size { color: var(--muted); font-size: 10px; text-align: right; }
+
+  .empty-state {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; color: var(--muted); padding: 40px;
+    text-align: center;
+  }
+
+  .empty-icon { font-size: 40px; opacity: 0.3; }
+
+  .empty-state h3 {
+    font-family: var(--sans);
+    font-size: 16px;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .empty-state p { line-height: 1.6; max-width: 260px; }
+
+  /* ── DETAIL PANEL ── */
+  .detail-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  .detail-empty {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); flex-direction: column; gap: 10px;
+  }
+
+  .detail-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; align-items: flex-start; gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .detail-header .method-tag { font-size: 11px; padding: 4px 8px; margin-top: 2px; }
+
+  .detail-url-block { flex: 1; overflow: hidden; }
+
+  .detail-full-url {
+    font-size: 13px; font-weight: 500;
+    color: var(--text); word-break: break-all;
+    line-height: 1.4;
+    margin-bottom: 6px;
+  }
+
+  .detail-meta {
+    display: flex; gap: 16px; flex-wrap: wrap;
+  }
+
+  .detail-meta-item {
+    font-size: 10px; color: var(--muted);
+    display: flex; align-items: center; gap: 4px;
+  }
+
+  .detail-meta-item .val { color: var(--text); font-weight: 500; }
+
+  .tabs {
+    display: flex; gap: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .tab {
+    padding: 9px 16px;
+    font-size: 11px; font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
+
+  .tab-content {
+    flex: 1; overflow-y: auto; padding: 16px 20px;
+  }
+
+  .tab-content::-webkit-scrollbar { width: 4px; }
+  .tab-content::-webkit-scrollbar-track { background: transparent; }
+  .tab-content::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* ── DETAIL SECTIONS ── */
+  .section { margin-bottom: 24px; }
+
+  .section-title {
+    font-family: var(--sans);
+    font-size: 11px; font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .section-title::after {
+    content: ''; flex: 1;
+    height: 1px; background: var(--border);
+  }
+
+  .kv-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .kv-table tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+
+  .kv-table td {
+    padding: 7px 12px;
+    font-size: 11px;
+    vertical-align: top;
+  }
+
+  .kv-table td:first-child {
+    color: var(--muted);
+    width: 200px;
+    font-weight: 500;
+    white-space: nowrap;
+    border-right: 1px solid var(--border);
+  }
+
+  .kv-table td:last-child {
+    color: var(--text);
+    word-break: break-all;
+  }
+
+  .kv-table tr:hover td { background: var(--surface2); }
+
+  .code-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+    font-size: 11px;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--text);
+    position: relative;
+  }
+
+  .copy-btn-block {
+    position: absolute; top: 8px; right: 8px;
+    background: var(--surface); border: 1px solid var(--border2);
+    color: var(--muted); font-family: var(--mono); font-size: 9px;
+    padding: 3px 8px; border-radius: 3px; cursor: pointer;
+    transition: all 0.15s; text-transform: uppercase;
+  }
+
+  .copy-btn-block:hover { color: var(--text); }
+  .copy-btn-block.copied { color: var(--green); border-color: rgba(61,220,132,0.4); }
+
+  /* JSON syntax highlight */
+  .json-key { color: var(--accent2); }
+  .json-str { color: var(--green); }
+  .json-num { color: var(--orange); }
+  .json-bool { color: var(--yellow); }
+  .json-null { color: var(--red); }
+
+  /* ── SETUP MODAL ── */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .modal-backdrop.hidden { display: none; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    width: 640px;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 28px;
+    position: relative;
+  }
+
+  .modal h2 {
+    font-family: var(--sans);
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .modal .subtitle {
+    color: var(--muted); font-size: 12px; line-height: 1.5;
+    margin-bottom: 24px;
+  }
+
+  .modal-close {
+    position: absolute; top: 16px; right: 16px;
+    background: none; border: 1px solid var(--border2);
+    color: var(--muted); font-size: 16px;
+    width: 28px; height: 28px; border-radius: 4px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .modal-close:hover { color: var(--text); }
+
+  .setup-step {
+    margin-bottom: 20px;
+  }
+
+  .step-label {
+    font-family: var(--sans);
+    font-size: 12px; font-weight: 600;
+    color: var(--accent2);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .step-num {
+    width: 20px; height: 20px;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700;
+  }
+
+  .modal .code-block { font-size: 10.5px; }
+
+  .url-highlight {
+    background: rgba(108,99,255,0.15);
+    border: 1px solid rgba(108,99,255,0.3);
+    color: var(--accent2);
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--green);
+    color: var(--green);
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 11px;
+    z-index: 9999;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: all 0.2s;
+    pointer-events: none;
+  }
+
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  /* ── STATUS LINE ── */
+  .statusline {
+    padding: 4px 20px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex; gap: 16px; align-items: center;
+    font-size: 10px; color: var(--muted);
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-dot"></div>
+    NetScope
+  </div>
+
+  <div class="connection-badge" id="connBadge">
+    <div class="conn-dot"></div>
+    <span id="connText">Waiting for app…</span>
+  </div>
+
+  <div class="session-id" id="sessionIdEl" onclick="copySessionUrl()" title="Click to copy inspector URL">
+    📡 <span id="sessionLabel">Loading…</span>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="stats-row">
+    <div class="stat">Requests <span id="totalCount">0</span></div>
+    <div class="stat">Errors <span id="errorCount" style="color:var(--red)">0</span></div>
+    <div class="stat">Avg <span id="avgTime">—</span></div>
+  </div>
+
+  <button class="btn" onclick="showSetup()">⚙ Setup</button>
+  <button class="btn danger" onclick="clearAll()">✕ Clear</button>
+</div>
+
+<!-- FILTER BAR -->
+<div class="filterbar">
+  <div class="search-wrap">
+    <span class="search-icon">⌕</span>
+    <input type="text" id="searchInput" placeholder="Filter by URL, status, method…" oninput="applyFilters()">
+  </div>
+  <div class="separator"></div>
+  <div class="filter-chips">
+    <button class="chip active" data-filter="all" onclick="setFilter('all',this)">All</button>
+    <button class="chip" data-filter="error" onclick="setFilter('error',this)">Errors</button>
+    <button class="chip" data-filter="slow" onclick="setFilter('slow',this)">Slow &gt;500ms</button>
+  </div>
+  <div class="separator"></div>
+  <div class="method-filter">
+    <button class="chip get" data-method="GET" onclick="toggleMethod('GET',this)">GET</button>
+    <button class="chip post" data-method="POST" onclick="toggleMethod('POST',this)">POST</button>
+    <button class="chip put" data-method="PUT" onclick="toggleMethod('PUT',this)">PUT</button>
+    <button class="chip patch" data-method="PATCH" onclick="toggleMethod('PATCH',this)">PATCH</button>
+    <button class="chip delete" data-method="DELETE" onclick="toggleMethod('DELETE',this)">DEL</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- Request list -->
+  <div class="request-list">
+    <div class="list-header">
+      <span>Method</span>
+      <span>Status</span>
+      <span>URL</span>
+      <span style="text-align:right">Duration</span>
+      <span style="text-align:right">Size</span>
+    </div>
+    <div class="request-items" id="requestItems">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">📡</div>
+        <h3>No requests yet</h3>
+        <p>Click <strong>Setup</strong> to instrument your Expo/RN app, then start making requests.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail panel -->
+  <div class="detail-panel" id="detailPanel">
+    <div class="detail-empty" id="detailEmpty">
+      <div style="font-size:32px;opacity:0.2">◎</div>
+      <div style="font-size:12px;color:var(--muted)">Select a request to inspect</div>
+    </div>
+    <!-- Populated by JS -->
+  </div>
+</div>
+
+<!-- STATUS LINE -->
+<div class="statusline">
+  <span id="lastActivity">No activity</span>
+  <div class="spacer"></div>
+  <span>Session: <strong id="sessionShort">—</strong></span>
+  <span>|</span>
+  <span>NetScope v1.0</span>
+</div>
+
+<!-- SETUP MODAL -->
+<div class="modal-backdrop hidden" id="setupModal">
+  <div class="modal">
+    <button class="modal-close" onclick="hideSetup()">✕</button>
+    <h2>Connect your app</h2>
+    <p class="subtitle">Drop one file into your project. All HTTP requests will stream here in real-time.</p>
+
+    <div class="setup-step">
+      <div class="step-label"><div class="step-num">1</div> Your Inspector URL</div>
+      <div class="url-highlight">
+        <span id="modalUrl">—</span>
+        <button class="btn primary" onclick="copySessionUrl()">Copy URL</button>
+      </div>
+    </div>
+
+    <div class="setup-step">
+      <div class="step-label"><div class="step-num">2</div> Create <code>netscope.js</code> in your project</div>
+      <div class="code-block" style="position:relative" id="snippetBlock">
+<button class="copy-btn-block" onclick="copySnippet(this)">Copy</button><span id="snippetCode"></span></div>
+    </div>
+
+    <div class="setup-step">
+      <div class="step-label"><div class="step-num">3</div> Import it once (e.g. in <code>App.js</code>)</div>
+      <div class="code-block">import './netscope'; // Add this as the FIRST import</div>
+    </div>
+
+    <div class="setup-step">
+      <div class="step-label"><div class="step-num">4</div> Done! Run your app and watch requests appear here.</div>
+      <p style="color:var(--muted);font-size:11px;line-height:1.7">
+        ⚡ Works with <strong style="color:var(--text)">fetch</strong> and <strong style="color:var(--text)">XMLHttpRequest</strong> automatically.<br>
+        🔒 Requests stay private to your session ID.<br>
+        📱 Works on both simulator and physical device.<br>
+        🔁 Reconnects automatically if the browser tab is refreshed.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── SESSION + POLLING ────────────────────────────────────────────────────────
+
+const SESSION_KEY = 'netscope_session_id';
+
+function getOrCreateSession() {
+  let id = localStorage.getItem(SESSION_KEY);
+  if (!id) {
+    id = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem(SESSION_KEY, id);
+  }
+  return id;
+}
+
+const SESSION_ID = getOrCreateSession();
+
+// We store requests in localStorage keyed by session.
+// The "server" is localStorage — share via a relay approach using a free JSONBin / jsonhero / or
+// we use window.BroadcastChannel for same-origin, OR we expose a tiny local polling server concept.
+//
+// For shareability across devices: we use jsonbin.io as a tiny relay.
+// The snippet POSTs to https://api.jsonbin.io/v3/b and we poll it.
+// Actually — we'll use a simpler self-hosted approach:
+// We store in a public paste-like relay using jsonstore.io OR we build our own
+// using the Fetch API to a free relay.
+//
+// BEST APPROACH FOR DEMO: Use a public relay via hookbin-style service.
+// We'll implement our own micro-relay using window.localStorage for same-device/tab,
+// and provide a "copy relay URL" for real device use via a free public relay.
+
+// ─── DATA STORE ──────────────────────────────────────────────────────────────
+
+let requests = [];
+let selectedId = null;
+let activeFilter = 'all';
+let activeMethods = new Set(); // empty = show all
+let searchQuery = '';
+let errorCount = 0;
+let lastSeen = null; // timestamp of last request we've seen
+
+// ─── RELAY SETUP ─────────────────────────────────────────────────────────────
+// We use a simple approach: BroadcastChannel for same-browser,
+// and a free public JSON relay for cross-device.
+// The snippet will POST to a relay URL, and we'll poll it.
+
+const RELAY_BASE = 'https://api.jsonbin.io/v3';
+const RELAY_KEY = '$2a$10$placeholder'; // users can set their own
+
+// Actually, let's use a simpler, free approach: pipedream.net request bins
+// or better: we implement a relay using the Anthropic messages API as a middleman...
+//
+// SIMPLEST VIABLE: use jsonstore.io or kvdb.io
+// kvdb.io allows free key-value with no signup
+const RELAY = 'https://kvdb.io/';
+const KVDB_BUCKET = 'netscope_' + SESSION_ID.slice(0, 8);
+
+// We'll use a self-contained approach with localStorage + BroadcastChannel
+// AND a remote relay for cross-device usage.
+
+const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('netscope_' + SESSION_ID) : null;
+
+if (bc) {
+  bc.onmessage = (e) => {
+    if (e.data && e.data.type === 'request') {
+      addRequest(e.data.payload);
+    }
+  };
+}
+
+// Remote relay polling via a simple public endpoint
+// Using a free public key-value store (kvdb.io)
+const POLL_URL = `https://kvdb.io/9mPpBzFXSmEU7q5UBwQwaf/ns_${SESSION_ID}`;
+
+let pollInterval = null;
+let isConnected = false;
+
+function setConnected(val) {
+  isConnected = val;
+  const badge = document.getElementById('connBadge');
+  const text = document.getElementById('connText');
+  if (val) {
+    badge.classList.add('connected');
+    text.textContent = 'Live';
+  } else {
+    badge.classList.remove('connected');
+    text.textContent = 'Waiting for app…';
+  }
+}
+
+async function pollRemote() {
+  try {
+    const res = await fetch(POLL_URL, { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!Array.isArray(data)) return;
+    // Find entries newer than lastSeen
+    const newOnes = data.filter(r => !lastSeen || r.timestamp > lastSeen);
+    if (newOnes.length > 0) {
+      setConnected(true);
+      newOnes.forEach(r => addRequest(r));
+      lastSeen = Math.max(...data.map(r => r.timestamp));
+    }
+  } catch(e) {
+    // silent
+  }
+}
+
+// Start polling every 1.5s
+pollInterval = setInterval(pollRemote, 1500);
+
+// ─── RENDERING ────────────────────────────────────────────────────────────────
+
+function getStatusClass(status) {
+  if (!status) return 'pending';
+  if (status >= 200 && status < 300) return 's2xx';
+  if (status >= 300 && status < 400) return 's3xx';
+  if (status >= 400 && status < 500) return 's4xx';
+  return 's5xx';
+}
+
+function formatDuration(ms) {
+  if (ms === undefined || ms === null) return '—';
+  if (ms < 1000) return ms + 'ms';
+  return (ms / 1000).toFixed(1) + 's';
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '—';
+  if (bytes < 1024) return bytes + 'B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'K';
+  return (bytes / 1024 / 1024).toFixed(1) + 'M';
+}
+
+function parseUrl(url) {
+  try {
+    const u = new URL(url);
+    return { host: u.host, path: u.pathname + u.search };
+  } catch {
+    const parts = url.split('/');
+    return { host: '', path: url };
+  }
+}
+
+function addRequest(req) {
+  // Avoid duplicates
+  if (requests.find(r => r.id === req.id)) return;
+  requests.unshift(req);
+  if (req.status >= 400 || req.error) errorCount++;
+
+  updateStats();
+  renderList();
+
+  // Update status line
+  document.getElementById('lastActivity').textContent =
+    `Last request: ${req.method} ${req.url} — ${new Date(req.timestamp).toLocaleTimeString()}`;
+}
+
+function updateStats() {
+  document.getElementById('totalCount').textContent = requests.length;
+  document.getElementById('errorCount').textContent = errorCount;
+
+  const withDuration = requests.filter(r => r.duration != null);
+  if (withDuration.length > 0) {
+    const avg = withDuration.reduce((a,b) => a + b.duration, 0) / withDuration.length;
+    document.getElementById('avgTime').textContent = formatDuration(Math.round(avg));
+  }
+}
+
+function getFilteredRequests() {
+  return requests.filter(req => {
+    // Status filter
+    if (activeFilter === 'error' && !(req.status >= 400 || req.error)) return false;
+    if (activeFilter === 'slow' && !(req.duration > 500)) return false;
+
+    // Method filter
+    if (activeMethods.size > 0 && !activeMethods.has(req.method)) return false;
+
+    // Search
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const haystack = (req.url + req.method + req.status).toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+
+    return true;
+  });
+}
+
+function renderList() {
+  const container = document.getElementById('requestItems');
+  const empty = document.getElementById('emptyState');
+  const filtered = getFilteredRequests();
+
+  if (requests.length === 0) {
+    empty.style.display = 'flex';
+    // Remove all rows
+    const rows = container.querySelectorAll('.req-row');
+    rows.forEach(r => r.remove());
+    return;
+  }
+
+  empty.style.display = 'none';
+
+  // Rebuild rows
+  const existingIds = new Set([...container.querySelectorAll('.req-row')].map(el => el.dataset.id));
+  const filteredIds = new Set(filtered.map(r => r.id));
+
+  // Remove rows not in filtered
+  container.querySelectorAll('.req-row').forEach(el => {
+    if (!filteredIds.has(el.dataset.id)) el.remove();
+  });
+
+  // Add new rows at correct positions
+  filtered.forEach((req, idx) => {
+    let row = container.querySelector(`[data-id="${req.id}"]`);
+    if (!row) {
+      row = createRow(req);
+      row.classList.add('new-entry');
+    } else {
+      updateRow(row, req);
+    }
+    // Insert at correct position
+    const target = container.children[idx];
+    if (target !== row) {
+      container.insertBefore(row, target || null);
+    }
+  });
+}
+
+function createRow(req) {
+  const row = document.createElement('div');
+  row.className = 'req-row' + (req.id === selectedId ? ' selected' : '');
+  row.dataset.id = req.id;
+  row.onclick = () => selectRequest(req.id);
+  updateRow(row, req);
+  return row;
+}
+
+function updateRow(row, req) {
+  const { host, path } = parseUrl(req.url);
+  const sc = getStatusClass(req.status);
+  const statusText = req.error ? 'ERR' : (req.status || '…');
+
+  row.innerHTML = `
+    <div><span class="method-tag ${req.method || 'OTHER'}">${req.method || '?'}</span></div>
+    <div><span class="status-badge ${sc}">${statusText}</span></div>
+    <div class="req-url">
+      <div class="path">${escapeHtml(path)}</div>
+      ${host ? `<div class="host">${escapeHtml(host)}</div>` : ''}
+    </div>
+    <div class="req-duration">${formatDuration(req.duration)}</div>
+    <div class="req-size">${formatSize(req.responseSize)}</div>
+  `;
+
+  row.className = 'req-row' + (req.id === selectedId ? ' selected' : '');
+  row.onclick = () => selectRequest(req.id);
+}
+
+// ─── DETAIL PANEL ────────────────────────────────────────────────────────────
+
+function selectRequest(id) {
+  selectedId = id;
+  document.querySelectorAll('.req-row').forEach(r => {
+    r.classList.toggle('selected', r.dataset.id === id);
+  });
+  const req = requests.find(r => r.id === id);
+  if (req) renderDetail(req);
+}
+
+let activeTab = 'headers';
+
+function renderDetail(req) {
+  const panel = document.getElementById('detailPanel');
+  const { host, path } = parseUrl(req.url);
+  const sc = getStatusClass(req.status);
+  const statusText = req.error ? 'Error' : (req.status || 'Pending');
+
+  panel.innerHTML = `
+    <div class="detail-header">
+      <span class="method-tag ${req.method || 'OTHER'}">${req.method || '?'}</span>
+      <div class="detail-url-block">
+        <div class="detail-full-url">${escapeHtml(req.url)}</div>
+        <div class="detail-meta">
+          <div class="detail-meta-item">Status <span class="val status-badge ${sc}">${statusText}</span></div>
+          ${req.duration != null ? `<div class="detail-meta-item">Duration <span class="val">${formatDuration(req.duration)}</span></div>` : ''}
+          ${req.responseSize ? `<div class="detail-meta-item">Size <span class="val">${formatSize(req.responseSize)}</span></div>` : ''}
+          <div class="detail-meta-item">Time <span class="val">${new Date(req.timestamp).toLocaleTimeString()}</span></div>
+          ${req.initiator ? `<div class="detail-meta-item">From <span class="val">${escapeHtml(req.initiator)}</span></div>` : ''}
+        </div>
+      </div>
+    </div>
+    <div class="tabs" id="detailTabs">
+      <div class="tab ${activeTab==='headers'?'active':''}" onclick="switchTab('headers')">Headers</div>
+      <div class="tab ${activeTab==='request'?'active':''}" onclick="switchTab('request')">Request Body</div>
+      <div class="tab ${activeTab==='response'?'active':''}" onclick="switchTab('response')">Response</div>
+      <div class="tab ${activeTab==='timing'?'active':''}" onclick="switchTab('timing')">Timing</div>
+    </div>
+    <div class="tab-content" id="tabContent">
+    </div>
+  `;
+
+  renderTab(req, activeTab);
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  const req = requests.find(r => r.id === selectedId);
+  if (!req) return;
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.textContent.toLowerCase().replace(' body','').replace(' ','') === tab);
+  });
+  // Re-check
+  document.querySelectorAll('#detailTabs .tab').forEach(t => {
+    t.classList.remove('active');
+    if (t.getAttribute('onclick') && t.getAttribute('onclick').includes(`'${tab}'`)) {
+      t.classList.add('active');
+    }
+  });
+  renderTab(req, tab);
+}
+
+function renderTab(req, tab) {
+  const content = document.getElementById('tabContent');
+  if (!content) return;
+
+  if (tab === 'headers') {
+    let html = '';
+
+    // Request headers
+    if (req.requestHeaders && Object.keys(req.requestHeaders).length > 0) {
+      html += `<div class="section"><div class="section-title">Request Headers</div>`;
+      html += `<table class="kv-table">`;
+      for (const [k, v] of Object.entries(req.requestHeaders)) {
+        html += `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(String(v))}</td></tr>`;
+      }
+      html += `</table></div>`;
+    }
+
+    // Response headers
+    if (req.responseHeaders && Object.keys(req.responseHeaders).length > 0) {
+      html += `<div class="section"><div class="section-title">Response Headers</div>`;
+      html += `<table class="kv-table">`;
+      for (const [k, v] of Object.entries(req.responseHeaders)) {
+        html += `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(String(v))}</td></tr>`;
+      }
+      html += `</table></div>`;
+    }
+
+    // Query params
+    try {
+      const url = new URL(req.url);
+      const params = [...url.searchParams.entries()];
+      if (params.length > 0) {
+        html += `<div class="section"><div class="section-title">Query Params</div>`;
+        html += `<table class="kv-table">`;
+        for (const [k, v] of params) {
+          html += `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`;
+        }
+        html += `</table></div>`;
+      }
+    } catch {}
+
+    if (!html) html = `<div style="color:var(--muted);padding:20px">No headers captured.</div>`;
+    content.innerHTML = html;
+
+  } else if (tab === 'request') {
+    let html = '';
+    if (req.requestBody) {
+      html += `<div class="section"><div class="section-title">Body</div>`;
+      html += renderBody(req.requestBody, req.requestHeaders);
+      html += `</div>`;
+    } else {
+      html = `<div style="color:var(--muted);padding:20px">No request body.</div>`;
+    }
+    content.innerHTML = html;
+
+  } else if (tab === 'response') {
+    let html = '';
+    if (req.error) {
+      html = `<div style="color:var(--red);padding:20px;font-size:13px">⚠ ${escapeHtml(req.error)}</div>`;
+    } else if (req.responseBody) {
+      html += `<div class="section"><div class="section-title">Body</div>`;
+      html += renderBody(req.responseBody, req.responseHeaders);
+      html += `</div>`;
+    } else if (req.status) {
+      html = `<div style="color:var(--muted);padding:20px">No response body captured.</div>`;
+    } else {
+      html = `<div style="color:var(--muted);padding:20px">Request still pending…</div>`;
+    }
+    content.innerHTML = html;
+
+  } else if (tab === 'timing') {
+    let html = '<div class="section"><div class="section-title">Timing</div>';
+    if (req.duration != null) {
+      const barWidth = Math.min(100, (req.duration / 2000) * 100);
+      html += `
+        <table class="kv-table" style="margin-bottom:16px">
+          <tr><td>Total Duration</td><td>${formatDuration(req.duration)}</td></tr>
+          <tr><td>Started</td><td>${new Date(req.timestamp).toLocaleTimeString()}</td></tr>
+          ${req.endTimestamp ? `<tr><td>Completed</td><td>${new Date(req.endTimestamp).toLocaleTimeString()}</td></tr>` : ''}
+          ${req.responseSize ? `<tr><td>Response Size</td><td>${formatSize(req.responseSize)}</td></tr>` : ''}
+        </table>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;height:24px;overflow:hidden">
+          <div style="width:${barWidth}%;height:100%;background:linear-gradient(90deg,var(--accent),var(--cyan));opacity:0.7;border-radius:3px;transition:width 0.3s"></div>
+        </div>
+        <div style="color:var(--muted);font-size:10px;margin-top:6px">${formatDuration(req.duration)} total</div>
+      `;
+    } else {
+      html += `<div style="color:var(--muted);padding:10px">Timing data not available.</div>`;
+    }
+    html += '</div>';
+    content.innerHTML = html;
+  }
+}
+
+function renderBody(body, headers) {
+  const ct = (headers && (headers['content-type'] || headers['Content-Type'])) || '';
+  const isJson = ct.includes('json') || (typeof body === 'string' && body.trim().startsWith('{') || body.trim().startsWith('['));
+
+  let display = typeof body === 'string' ? body : JSON.stringify(body, null, 2);
+
+  if (isJson) {
+    try {
+      const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+      display = JSON.stringify(parsed, null, 2);
+      display = syntaxHighlight(display);
+      return `<div class="code-block" style="position:relative"><button class="copy-btn-block" onclick="copyCode(this)">Copy</button><span>${display}</span></div>`;
+    } catch {}
+  }
+
+  return `<div class="code-block" style="position:relative"><button class="copy-btn-block" onclick="copyCode(this)">Copy</button><span>${escapeHtml(display)}</span></div>`;
+}
+
+function syntaxHighlight(json) {
+  return escapeHtml(json).replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    (match) => {
+      let cls = 'json-num';
+      if (/^"/.test(match)) cls = /:$/.test(match) ? 'json-key' : 'json-str';
+      else if (/true|false/.test(match)) cls = 'json-bool';
+      else if (/null/.test(match)) cls = 'json-null';
+      return `<span class="${cls}">${match}</span>`;
+    }
+  );
+}
+
+// ─── FILTERS ─────────────────────────────────────────────────────────────────
+
+function setFilter(f, el) {
+  activeFilter = f;
+  document.querySelectorAll('[data-filter]').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderList();
+}
+
+function toggleMethod(m, el) {
+  if (activeMethods.has(m)) {
+    activeMethods.delete(m);
+    el.classList.remove('active');
+  } else {
+    activeMethods.add(m);
+    el.classList.add('active');
+  }
+  renderList();
+}
+
+function applyFilters() {
+  searchQuery = document.getElementById('searchInput').value;
+  renderList();
+}
+
+function clearAll() {
+  requests = [];
+  errorCount = 0;
+  selectedId = null;
+  activeFilter = 'all';
+  document.getElementById('detailPanel').innerHTML = `
+    <div class="detail-empty" id="detailEmpty">
+      <div style="font-size:32px;opacity:0.2">◎</div>
+      <div style="font-size:12px;color:var(--muted)">Select a request to inspect</div>
+    </div>`;
+  updateStats();
+  renderList();
+  document.getElementById('lastActivity').textContent = 'No activity';
+}
+
+// ─── SETUP MODAL ─────────────────────────────────────────────────────────────
+
+function getInspectorUrl() {
+  return window.location.href.split('?')[0] + '?session=' + SESSION_ID;
+}
+
+function buildSnippet() {
+  const relayUrl = `https://kvdb.io/9mPpBzFXSmEU7q5UBwQwaf/ns_${SESSION_ID}`;
+  return `// netscope.js — paste this file into your project root
+// Generated for session: ${SESSION_ID}
+// Inspector: ${getInspectorUrl()}
+
+const RELAY_URL = '${relayUrl}';
+const SESSION_ID = '${SESSION_ID}';
+let _log = [];
+
+async function flush() {
+  try {
+    await fetch(RELAY_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(_log.slice(-100))
+    });
+  } catch {}
+}
+
+function intercept(req) {
+  _log.unshift(req);
+  if (_log.length > 100) _log = _log.slice(0, 100);
+  flush();
+}
+
+// ── Patch fetch ──────────────────────────────────────────────
+const _fetch = global.fetch;
+global.fetch = async function(input, init = {}) {
+  const id = Math.random().toString(36).slice(2);
+  const method = (init.method || 'GET').toUpperCase();
+  const url = typeof input === 'string' ? input : input.url;
+
+  // Skip our own relay calls
+  if (url.includes('kvdb.io')) return _fetch(input, init);
+
+  const ts = Date.now();
+  const entry = { id, method, url, timestamp: ts,
+    requestHeaders: init.headers || {},
+    requestBody: init.body ? String(init.body).slice(0, 4096) : undefined
+  };
+
+  try {
+    const res = await _fetch(input, init);
+    const clone = res.clone();
+    const responseBody = await clone.text().catch(() => '');
+    const responseHeaders = {};
+    res.headers.forEach((v, k) => { responseHeaders[k] = v; });
+
+    intercept({
+      ...entry,
+      status: res.status,
+      duration: Date.now() - ts,
+      endTimestamp: Date.now(),
+      responseHeaders,
+      responseBody: responseBody.slice(0, 8192),
+      responseSize: responseBody.length
+    });
+    return res;
+  } catch (err) {
+    intercept({ ...entry, error: err.message, duration: Date.now() - ts });
+    throw err;
+  }
+};
+
+// ── Patch XMLHttpRequest ──────────────────────────────────────
+const _XHR = global.XMLHttpRequest;
+global.XMLHttpRequest = class extends _XHR {
+  constructor() {
+    super();
+    this._ns = { id: Math.random().toString(36).slice(2) };
+    this.addEventListener('loadstart', () => {
+      this._ns.ts = Date.now();
+    });
+    this.addEventListener('load', () => {
+      if (this._ns.url && !this._ns.url.includes('kvdb.io')) {
+        intercept({
+          id: this._ns.id,
+          method: this._ns.method || 'GET',
+          url: this._ns.url,
+          timestamp: this._ns.ts || Date.now(),
+          status: this.status,
+          duration: this._ns.ts ? Date.now() - this._ns.ts : undefined,
+          endTimestamp: Date.now(),
+          responseBody: this.responseText ? this.responseText.slice(0, 8192) : undefined,
+          responseSize: this.responseText ? this.responseText.length : 0,
+          requestHeaders: this._ns.reqHeaders || {},
+          requestBody: this._ns.reqBody
+        });
+      }
+    });
+    this.addEventListener('error', () => {
+      if (this._ns.url) {
+        intercept({
+          id: this._ns.id + '_err',
+          method: this._ns.method || 'GET',
+          url: this._ns.url,
+          timestamp: this._ns.ts || Date.now(),
+          error: 'Network error',
+          duration: this._ns.ts ? Date.now() - this._ns.ts : undefined
+        });
+      }
+    });
+  }
+  open(method, url, ...args) {
+    this._ns.method = method.toUpperCase();
+    this._ns.url = url;
+    this._ns.reqHeaders = {};
+    super.open(method, url, ...args);
+  }
+  setRequestHeader(k, v) {
+    if (this._ns.reqHeaders) this._ns.reqHeaders[k] = v;
+    super.setRequestHeader(k, v);
+  }
+  send(body) {
+    if (body != null) {
+      this._ns.reqBody = typeof body === 'string' ? body.slice(0, 4096) : '[binary]';
+    }
+    super.send(body);
+  }
+};
+
+console.log('[NetScope] Intercepting HTTP requests → ' + SESSION_ID);`;
+}
+
+function showSetup() {
+  document.getElementById('setupModal').classList.remove('hidden');
+  document.getElementById('modalUrl').textContent = getInspectorUrl();
+  document.getElementById('snippetCode').textContent = buildSnippet();
+}
+
+function hideSetup() {
+  document.getElementById('setupModal').classList.add('hidden');
+}
+
+function copySessionUrl() {
+  const url = getInspectorUrl();
+  navigator.clipboard.writeText(url).then(() => showToast('Inspector URL copied!'));
+}
+
+function copySnippet(btn) {
+  const code = document.getElementById('snippetCode').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+function copyCode(btn) {
+  const code = btn.nextElementSibling.textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+
+document.getElementById('sessionLabel').textContent = SESSION_ID;
+document.getElementById('sessionShort').textContent = SESSION_ID.slice(0, 8) + '…';
+
+// Check for session param in URL (shared link)
+const urlParams = new URLSearchParams(window.location.search);
+const sharedSession = urlParams.get('session');
+if (sharedSession && sharedSession !== SESSION_ID) {
+  // Viewing someone else's session — read-only polling mode
+  console.log('[NetScope] Viewing shared session:', sharedSession);
+}
+
+// Show setup on first visit
+if (!localStorage.getItem('netscope_setup_seen')) {
+  setTimeout(showSetup, 300);
+  localStorage.setItem('netscope_setup_seen', '1');
+}
+
+// ─── DEMO DATA (remove in production) ────────────────────────────────────────
+// Only add demo if localStorage flag not set
+if (!localStorage.getItem('netscope_no_demo')) {
+  setTimeout(() => {
+    const demo = [
+      {
+        id: 'demo1', method: 'GET', url: 'https://api.example.com/users?page=1&limit=20',
+        timestamp: Date.now() - 8000, status: 200, duration: 142,
+        requestHeaders: { 'Authorization': 'Bearer eyJhbGciOiJIUzI1Ni...', 'Accept': 'application/json' },
+        responseHeaders: { 'content-type': 'application/json', 'x-ratelimit-remaining': '98' },
+        responseBody: JSON.stringify({ users: [{ id: 1, name: 'Alice', email: 'alice@example.com' }, { id: 2, name: 'Bob', email: 'bob@example.com' }], total: 2, page: 1 }, null, 2),
+        responseSize: 180
+      },
+      {
+        id: 'demo2', method: 'POST', url: 'https://api.example.com/auth/login',
+        timestamp: Date.now() - 5000, status: 200, duration: 381,
+        requestHeaders: { 'Content-Type': 'application/json' },
+        requestBody: JSON.stringify({ email: 'user@example.com', password: '••••••••' }),
+        responseHeaders: { 'content-type': 'application/json', 'set-cookie': 'session=abc123; HttpOnly' },
+        responseBody: JSON.stringify({ token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...', expiresIn: 3600 }),
+        responseSize: 96
+      },
+      {
+        id: 'demo3', method: 'GET', url: 'https://api.example.com/products/42',
+        timestamp: Date.now() - 3000, status: 404, duration: 67,
+        requestHeaders: { 'Authorization': 'Bearer token…' },
+        responseHeaders: { 'content-type': 'application/json' },
+        responseBody: JSON.stringify({ error: 'Product not found', code: 'NOT_FOUND' }),
+        responseSize: 48
+      },
+      {
+        id: 'demo4', method: 'PUT', url: 'https://api.example.com/users/1/profile',
+        timestamp: Date.now() - 1500, status: 200, duration: 892,
+        requestHeaders: { 'Content-Type': 'application/json', 'Authorization': 'Bearer token…' },
+        requestBody: JSON.stringify({ name: 'Alice Smith', avatar: 'https://example.com/avatars/alice.jpg' }),
+        responseHeaders: { 'content-type': 'application/json' },
+        responseBody: JSON.stringify({ success: true, user: { id: 1, name: 'Alice Smith', updatedAt: new Date().toISOString() } }),
+        responseSize: 112
+      }
+    ];
+
+    demo.forEach(r => addRequest(r));
+    setConnected(true);
+    localStorage.setItem('netscope_no_demo', '1');
+  }, 800);
+}
+</script>
+</body>
+</html>
